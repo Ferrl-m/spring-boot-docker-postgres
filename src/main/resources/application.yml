@@ -17,7 +17,7 @@ spring:
   # JPA properties
   jpa:
     hibernate:
-      ddl-auto: update # When you launch the application for the first time - switch "update" at "create"
+      ddl-auto: create # When you launch the application for the first time - switch "update" at "create"
     show-sql: true
     database: postgresql
     database-platform: org.hibernate.dialect.PostgreSQLDialect

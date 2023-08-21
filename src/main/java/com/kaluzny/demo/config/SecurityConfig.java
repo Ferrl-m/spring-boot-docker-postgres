@@ -17,18 +17,18 @@ import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
-//@EnableMethodSecurity
+@EnableMethodSecurity
 class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
 
         httpSecurity
-                .authorizeHttpRequests(registry -> registry
-                        .requestMatchers(HttpMethod.GET,"/api/**").hasRole("USER")
-                        .requestMatchers(HttpMethod.POST,"/api/**").hasRole("PERSON")
-                        .anyRequest().authenticated()
-                )
+//                .authorizeHttpRequests(registry -> registry
+//                        .requestMatchers(HttpMethod.GET,"/api/**").hasRole("USER")
+//                        .requestMatchers(HttpMethod.POST,"/api/**").hasRole("PERSON")
+//                        .anyRequest().authenticated()
+//                )
                 .oauth2ResourceServer(oauth2Configurer -> oauth2Configurer
                         .jwt(jwtConfigurer -> jwtConfigurer
                                 .jwtAuthenticationConverter(jwt -> {

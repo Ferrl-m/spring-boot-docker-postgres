@@ -57,7 +57,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
     @GetMapping("/automobiles")
     @ResponseStatus(HttpStatus.OK)
     //@Cacheable(value = "automobile", sync = true)
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('USER')")
     public Collection<Automobile> getAllAutomobiles() {
         log.info("getAllAutomobiles() - start");
         Collection<Automobile> collection = repository.findAll();
