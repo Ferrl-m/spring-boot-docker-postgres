@@ -7,6 +7,7 @@ import com.kaluzny.demo.exception.ThereIsNoSuchAutoException;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.PostConstruct;
+import jakarta.jms.Topic;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,23 +16,28 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jms.core.JmsTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping(value = "/api", produces = MediaType.APPLICATION_JSON_VALUE)
 @RequiredArgsConstructor
 @Slf4j
-public class AutomobileRestController implements AutomobileResource, AutomobileOpenApi {
+public class AutomobileRestController implements AutomobileResource, AutomobileOpenApi, JMSPublisher {
 
     private final AutomobileRepository repository;
+    private final JmsTemplate jmsTemplate;
 
     public static double getTiming(Instant start, Instant end) {
         return Duration.between(start, end).toMillis();
@@ -40,12 +46,12 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
     @Transactional
     @PostConstruct
     public void init() {
-        repository.save(new Automobile(1L, "Ford", "Green", Instant.now(), Instant.now(), true, false));
+        repository.save(new Automobile(1L, "Ford", "Green", LocalDateTime.now(), LocalDateTime.now(), true, false));
     }
 
     @PostMapping("/automobiles")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('MANAGER')")
     //@RolesAllowed("ADMIN")
     public Automobile saveAutomobile(@Valid @RequestBody Automobile automobile) {
         log.info("saveAutomobile() - start: automobile = {}", automobile);
@@ -56,8 +62,8 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
 
     @GetMapping("/automobiles")
     @ResponseStatus(HttpStatus.OK)
-    //@Cacheable(value = "automobile", sync = true)
     @PreAuthorize("hasRole('USER')")
+    //@Cacheable(value = "automobile", sync = true)
     public Collection<Automobile> getAllAutomobiles() {
         log.info("getAllAutomobiles() - start");
         Collection<Automobile> collection = repository.findAll();
@@ -67,6 +73,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
 
     @GetMapping("/automobiles/{id}")
     @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("hasRole('USER')")
     //@Cacheable(value = "automobile", sync = true)
     public Automobile getAutomobileById(@PathVariable Long id) {
         log.info("getAutomobileById() - start: id = {}", id);
@@ -82,6 +89,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
 
     @Hidden
     @GetMapping(value = "/automobiles", params = {"name"})
+    @PreAuthorize("hasRole('USER')")
     @ResponseStatus(HttpStatus.OK)
     public Collection<Automobile> findAutomobileByName(@RequestParam(value = "name") String name) {
         log.info("findAutomobileByName() - start: name = {}", name);
@@ -92,6 +100,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
 
     @PutMapping("/automobiles/{id}")
     @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("hasRole('MANAGER')")
     //@CachePut(value = "automobile", key = "#id")
     public Automobile refreshAutomobile(@PathVariable Long id, @RequestBody Automobile automobile) {
         log.info("refreshAutomobile() - start: id = {}, automobile = {}", id, automobile);
@@ -114,6 +123,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
 
     @DeleteMapping("/automobiles/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(value = "automobile", key = "#id")
     public String removeAutomobileById(@PathVariable Long id) {
         log.info("removeAutomobileById() - start: id = {}", id);
@@ -127,6 +137,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
 
     @Hidden
     @DeleteMapping("/automobiles")
+    @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeAllAutomobiles() {
         log.info("removeAllAutomobiles() - start");
@@ -135,6 +146,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
     }
 
     @GetMapping(value = "/automobiles", params = {"color"})
+    @PreAuthorize("hasRole('USER')")
     @ResponseStatus(HttpStatus.OK)
     public Collection<Automobile> findAutomobileByColor(
             @Parameter(description = "Name of the Automobile to be obtained. Cannot be empty.", required = true)
@@ -150,6 +162,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
     }
 
     @GetMapping(value = "/automobiles", params = {"name", "color"})
+    @PreAuthorize("hasRole('USER')")
     @ResponseStatus(HttpStatus.OK)
     public Collection<Automobile> findAutomobileByNameAndColor(
             @Parameter(description = "Name of the Automobile to be obtained. Cannot be empty.", required = true)
@@ -161,6 +174,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
     }
 
     @GetMapping(value = "/automobiles", params = {"colorStartsWith"})
+    @PreAuthorize("hasRole('USER')")
     @ResponseStatus(HttpStatus.OK)
     public Collection<Automobile> findAutomobileByColorStartsWith(
             @RequestParam(value = "colorStartsWith") String colorStartsWith,
@@ -174,6 +188,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
     }
 
     @GetMapping("/automobiles-names")
+    @PreAuthorize("hasRole('USER')")
     @ResponseStatus(HttpStatus.OK)
     public List<String> getAllAutomobilesByName() {
         log.info("getAllAutomobilesByName() - start");
@@ -184,5 +199,22 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
                 .collect(Collectors.toList());
         log.info("getAllAutomobilesByName() - end");
         return collectionName;
+    }
+
+    @Override
+    @PostMapping("/message")
+    @PreAuthorize("hasRole('MANAGER')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ResponseEntity<Automobile> pushMessage(@RequestBody Automobile automobile) {
+        try {
+            Topic autoTopic = Objects.requireNonNull(jmsTemplate
+                    .getConnectionFactory()).createConnection().createSession().createTopic("AutoTopic");
+            Automobile savedAutomobile = repository.save(automobile);
+            log.info("\u001B[32m" + "Sending Automobile with id: " + savedAutomobile.getId() + "\u001B[0m");
+            jmsTemplate.convertAndSend(autoTopic, savedAutomobile);
+            return new ResponseEntity<>(savedAutomobile, HttpStatus.OK);
+        } catch (Exception exception) {
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 }

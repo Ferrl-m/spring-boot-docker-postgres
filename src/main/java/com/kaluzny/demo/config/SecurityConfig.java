@@ -1,6 +1,5 @@
 package com.kaluzny.demo.config;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -26,7 +25,8 @@ class SecurityConfig {
         httpSecurity
 //                .authorizeHttpRequests(registry -> registry
 //                        .requestMatchers(HttpMethod.GET,"/api/**").hasRole("USER")
-//                        .requestMatchers(HttpMethod.POST,"/api/**").hasRole("PERSON")
+//                        .requestMatchers(HttpMethod.POST,"/api/**").hasRole("MANAGER")
+//                        .requestMatchers(HttpMethod.DELETE,"/api/**").hasRole("ADMIN")
 //                        .anyRequest().authenticated()
 //                )
                 .oauth2ResourceServer(oauth2Configurer -> oauth2Configurer
@@ -34,9 +34,11 @@ class SecurityConfig {
                                 .jwtAuthenticationConverter(jwt -> {
                                     Map<String, Collection<String>> realmAccess = jwt.getClaim("realm_access");
                                     Collection<String> roles = realmAccess.get("roles");
+
                                     var grantedAuthorities = roles.stream()
                                             .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                                             .collect(Collectors.toList());
+
                                     return new JwtAuthenticationToken(jwt, grantedAuthorities);
                                 })));
         return httpSecurity.build();
