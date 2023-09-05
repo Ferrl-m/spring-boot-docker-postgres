@@ -4,10 +4,11 @@ import com.kaluzny.demo.domain.Automobile;
 import com.kaluzny.demo.domain.AutomobileRepository;
 import com.kaluzny.demo.exception.AutoWasDeletedException;
 import com.kaluzny.demo.exception.ThereIsNoSuchAutoException;
+import com.kaluzny.demo.services.AutomobileService;
+import com.kaluzny.demo.services.JMSPublisher;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.PostConstruct;
-import jakarta.jms.Topic;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +18,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jms.core.JmsTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -27,17 +27,17 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping(value = "/api", produces = MediaType.APPLICATION_JSON_VALUE)
 @RequiredArgsConstructor
 @Slf4j
-public class AutomobileRestController implements AutomobileResource, AutomobileOpenApi, JMSPublisher {
+public class AutomobileRestController implements AutomobileResource, AutomobileOpenApi {
 
     private final AutomobileRepository repository;
-    private final JmsTemplate jmsTemplate;
+    private final JMSPublisher jmsPublisherService;
+    private final AutomobileService automobileService;
 
     public static double getTiming(Instant start, Instant end) {
         return Duration.between(start, end).toMillis();
@@ -104,19 +104,7 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
     //@CachePut(value = "automobile", key = "#id")
     public Automobile refreshAutomobile(@PathVariable Long id, @RequestBody Automobile automobile) {
         log.info("refreshAutomobile() - start: id = {}, automobile = {}", id, automobile);
-        Automobile updatedAutomobile = repository.findById(id)
-                .map(entity -> {
-                    entity.checkColor(automobile);
-                    entity.setName(automobile.getName());
-                    entity.setColor(automobile.getColor());
-                    entity.setUpdateDate(automobile.getUpdateDate());
-                    if (entity.getDeleted()) {
-                        throw new AutoWasDeletedException();
-                    }
-                    return repository.save(entity);
-                })
-                //.orElseThrow(() -> new EntityNotFoundException("Automobile not found with id = " + id));
-                .orElseThrow(ThereIsNoSuchAutoException::new);
+        Automobile updatedAutomobile = automobileService.refreshAutomobile(id, automobile);
         log.info("refreshAutomobile() - end: updatedAutomobile = {}", updatedAutomobile);
         return updatedAutomobile;
     }
@@ -201,20 +189,25 @@ public class AutomobileRestController implements AutomobileResource, AutomobileO
         return collectionName;
     }
 
-    @Override
     @PostMapping("/message")
     @PreAuthorize("hasRole('MANAGER')")
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<Automobile> pushMessage(@RequestBody Automobile automobile) {
-        try {
-            Topic autoTopic = Objects.requireNonNull(jmsTemplate
-                    .getConnectionFactory()).createConnection().createSession().createTopic("AutoTopic");
-            Automobile savedAutomobile = repository.save(automobile);
-            log.info("\u001B[32m" + "Sending Automobile with id: " + savedAutomobile.getId() + "\u001B[0m");
-            jmsTemplate.convertAndSend(autoTopic, savedAutomobile);
-            return new ResponseEntity<>(savedAutomobile, HttpStatus.OK);
-        } catch (Exception exception) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        log.info("pushMessage() - start");
+        ResponseEntity<Automobile> response = jmsPublisherService.pushMessage(automobile);
+        log.info("pushMessage() - end");
+
+        return response;
+    }
+
+    @PostMapping("/update-message")
+    @PreAuthorize("hasRole('MANAGER')")
+    @ResponseStatus(HttpStatus.OK)
+    public ResponseEntity<Automobile> updateAutoMessage(@RequestBody Automobile automobile) {
+        log.info("updateAutoMessage() - start");
+        ResponseEntity<Automobile> response = jmsPublisherService.updateAutoMessage(automobile);
+        log.info("updateAutoMessage() - end");
+
+        return response;
     }
 }
